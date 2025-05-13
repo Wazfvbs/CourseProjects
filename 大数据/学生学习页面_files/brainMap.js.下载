@@ -1,0 +1,90 @@
+var supportType = [".pdf",".doc",".docx"];
+var fileStatusArray = [];
+var initBrainMap = false;
+var supportAiBrainMap = $("#supportAiBrainMap").val();
+
+$(function() {
+	if(supportAiBrainMap == "true") {
+		loadAiFileStatus();
+	} else {
+		initBrainMap = true;
+	}
+});
+
+function getObjectIds(){
+	try {
+		if(typeof mArg == "undefined" || mArg == "") {
+			return "";
+		}
+
+		var array = mArg.attachments;
+		if(typeof array == "undefined" || array.length == 0) {
+			return "";
+		}
+
+		var objectIdArray = [];
+		for(var i = 0; i < array.length;i++) {
+			var json = array[i];
+			var property = json.property;
+			if(typeof property == "undefined" || property == "") {
+				continue
+			}
+
+			var module = property.module;
+			if(module !== "insertdoc") {
+				continue;
+			}
+
+			var type = property.type;
+			if(!supportType.includes(type.toLowerCase())) {
+				continue;
+			}
+
+			var objectId = property.objectid;
+			objectIdArray.push(objectId);
+		}
+
+		return objectIdArray.join(",");
+	} catch (e) {
+		console.log(e);
+	}
+
+	return "";
+}
+
+function loadAiFileStatus() {
+	try {
+		var objectIdStr = getObjectIds();
+		if(objectIdStr == "") {
+			initBrainMap = true;
+			return;
+		}
+
+		var courseId = $("#curCourseId").val();
+		$.ajax({
+			type:"post",
+			url:_HOST_CP2_ + '/mycourse/query-file-status',
+			data: {
+				courseId: courseId,
+				objectIds: objectIdStr
+			},
+			dataType:"json",
+			success:function(data) {
+				initBrainMap = true;
+				var list = data.data;
+				if(typeof list == "undefined") {
+					return
+				}
+
+				for (var i = 0; i < list.length; i++) {
+					fileStatusArray.push(list[i]);
+				}
+			},
+			error : function() {
+				initBrainMap = true;
+			}
+		});
+	} catch (ex) {
+		console.log(ex);
+	}
+}

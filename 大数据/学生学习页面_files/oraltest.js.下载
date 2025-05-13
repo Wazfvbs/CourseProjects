@@ -1,0 +1,193 @@
+var lang_cpjg = "测评结果";
+var lang_ylch = "遗漏词汇";
+var lang_zqdfx = "准确度分析";
+$(function () {
+
+    $(".recordAudio").on("click", function () {
+        var qid = $(this).attr("dataid");
+        var editor1 = UE.getEditor("answerUe" + qid);
+        editor1.setContent('', false);
+        var qid = $(this).attr("dataid");
+        $("#question" + qid + " .edui-for-recording .edui-icon").click();
+    });
+
+
+    $(".matchAudio").click(function () {
+        var qid = $(this).attr("dataid");
+        $(".haveAudio"+qid+".matchAudio").hide();
+        $(".matching"+qid).show();
+
+        var eleRevert = function (){
+            $(".matching"+qid).hide();
+            $(".haveAudio"+qid+".matchAudio").show();
+        }
+        matchAudio(qid,eleRevert);
+    });
+    if(typeof I18N_WORK != 'undefined'){
+        lang_cpjg = I18N_WORK.cpResult;
+        lang_ylch = I18N_WORK.ylch;
+        lang_zqdfx = I18N_WORK.zqdfx;
+    }
+})
+
+function matchAudio(qid,callback) {
+    var matchEnc = $("#matchEnc").val();
+    var answerid = $("#answerId").val();
+    var objectid = $("#answer" + qid).attr("objectid");
+    var audioName = $("#answer" + qid).attr("audioname");
+    var readText = $("#readText" + qid).text();
+    var lang = $("#answer" + qid).attr("lang");
+    $.ajax({
+        type: "post",
+        url: "/ans-ext-proxy/oral-test/match",
+        data: {
+            diff: 1,
+            expected: readText,
+            objectid: objectid,
+            enc: matchEnc,
+            answerid: answerid,
+            qid: qid,
+            lang: lang
+        },
+        dataType: "json",
+        success: function (data) {
+            if (data.status) {
+
+                if (typeof data.result != "undefined") {
+                    var answer = [];
+                    var item = {};
+                    item.matchResult = data.result;
+                    item.matchResultEnc = data.matchResultEnc;
+                    item.objectId = objectid;
+                    item.audioName = audioName;
+                    answer[0] = item;
+                    var answerStr = JSON.stringify(answer);
+                    $("#answer" + qid).val(answerStr);
+
+                    if (typeof data.result != "undefined") {
+                        var result = fixMatchdata(data.result);
+                    }
+                    if (submitLock == 0) {
+                        $("#matchResult" + qid).empty()
+                        $("#matchResult" + qid).append('<div  class="mark_answer fs14" >' +
+                            '<div class="mark_key clearfix">' +
+                            '<dl class="mark_fill colorDeep">' +
+                            '<dt><i class="fontWeight">' + lang_cpjg + '：</i></dt>' +
+                            '<dd class="lostword">' + lang_ylch + '：' + result.missedStr + '</dd>' +
+                            // '<dd>复读词汇：' + result.repeatedStr + '</dd>' +
+                            '</dl>' +
+                            // '<dl class="mark_fill">' +
+                            // '<dd>句子语调：<!--<span class="colorGreen">-->' + result.intonationStr + '<!--</span>--></dd>' +
+                            // '</dl>' +
+                            // '<dl class="mark_fill">' +
+                            // '<dd>平均语速：<!--<span class="colorRed">-->' + result.articulationRateStr + '<!--</span>--></dd>' +
+                            // '<dd>停顿过长：<span>' + result.long_pause_count + ' 次</span></dd>' +
+                            // '</dl>' +
+                            '<dl class="mark_fill"><dd>' + lang_zqdfx + '：'+result.diffs+'</dd></dl>' +
+                            '</div>' +
+                            '</div>');
+                    }
+                } else {
+                    oralTestError(qid, objectid, audioName);
+                }
+            } else {
+                $.toast({type: 'notice', content: '口语题测评失败'});
+            }
+        }, complete: function () {
+            oralTestEndNum++;
+            callback && callback();
+        }, error: function () {
+            oralTestError(qid, objectid, audioName);
+        }
+    });
+}
+
+function oralTestError(qid,objectid,audioName){
+    var answer = [];
+    var item = {};
+    item.objectId = objectid;
+    item.audioName = audioName;
+    answer[0] = item;
+    var answerStr = JSON.stringify(answer);
+    $("#answer" + qid).val(answerStr);
+}
+function fixMatchdata(data){
+
+    var result = {}
+    var missed = data.missed;
+    var repeated = data.repeated;
+    if (typeof missed != "undefined" && missed.length >0) {
+        result.missedStr = missed.join(",");
+    }else {
+        result.missedStr = "无";
+    }
+    if (typeof repeated != "undefined" && repeated.length > 0) {
+        result.repeatedStr = repeated.join(",");
+    } else {
+        result.repeatedStr = "无";
+    }
+    var intonation = data.intonation;
+    if (typeof intonation != "undefined") {
+        if (intonation == "FALL") {
+            result.intonationStr = "降";
+        }else if (intonation == "RISE") {
+            result.intonationStr = "升";
+        }else if (intonation == "LEVEL") {
+            result.intonationStr = "平";
+        }
+    }
+    var articulationRate = data.articulation_rate;
+    if (typeof articulationRate != "undefined") {
+        if (articulationRate == "slow") {
+            result.articulationRateStr = "较慢";
+        }else if (articulationRate == "normal") {
+            result.articulationRateStr = "适中";
+        }else if (articulationRate == "quick") {
+            result.articulationRateStr = "较慢";
+        }
+    }
+    result.long_pause_count = data.long_pause_count;;
+    result.diffs = data.diffs;;
+    return result;
+}
+
+var oralTestEndNum = 0;
+function setOralTestAnswer() {
+    oralTestEndNum = 0;
+    $(".oralTestQue").each(function() {
+        var resultJson = $(this).val();
+        var objectid = $(this).attr("objectid");
+        //题目已作答 或者已经评测过
+        if ((typeof objectid == "undefined" || objectid.length == 0) || (typeof resultJson != "undefined" && resultJson.length > 0)) {
+            oralTestEndNum++;
+            return true;
+        }
+        var qid = $(this).attr("qid");
+        matchAudio(qid);
+    });
+}
+
+function oralTestAddAudio(qid){
+    var editor1 = UE.getEditor("answerUe"+qid);
+
+    $("#recordVideoDiv"+qid).hide();
+    var videohtml = editor1.getContent();
+    $("#videoDiv"+qid).html(videohtml);
+    $(".haveAudio"+qid).show()
+
+    var objectid = $("#videoDiv"+qid+" iframe").attr("data");
+    var audioname = $("#videoDiv"+qid+" iframe").attr("name");
+    $("#answer"+qid).attr("objectid",objectid);
+    $("#answer"+qid).attr("audioname",audioname);
+    $("#answer"+qid).val("");
+
+    var answerArray = [];
+    var obj = {};
+    obj.objectId = objectid;
+    obj.audioName = audioname;
+    answerArray.push(obj)
+    var answer = JSON.stringify(answerArray);
+    $("#answer" + qid).val(answer);
+
+    $("#matchResult"+qid).empty();
+};
